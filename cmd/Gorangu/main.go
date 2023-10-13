@@ -1,84 +1,80 @@
 package main
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"net/http"
+	"os"
+	"time"
 
-    tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
+const url = "https://shoto.at"
+
 type model struct {
-    cursor int
-    choices []string
-    selected map[int]struct{}
+	status int
+	err    error
 }
 
-func initialModel() model {
-    return model{
-        choices: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-        selected: make(map[int]struct{}),
-    }
+type errMsg struct{ err error }
+
+type statusMsg int
+
+func checkServer() tea.Msg {
+	c := &http.Client{Timeout: 10 * time.Second}
+
+	res, err := c.Get(url)
+
+	if err != nil {
+		return errMsg{err}
+	}
+
+	return statusMsg(res.StatusCode)
 }
+
+func (e errMsg) Error() string { return e.err.Error() }
 
 func (m model) Init() tea.Cmd {
-    return nil
+	return checkServer
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    switch msg := msg.(type)  {
-    case tea.KeyMsg:
-        switch msg.String() {
-        case "ctrl+c", "q":
-            return m, tea.Quit
-        case "up", "k":
-            if m.cursor > 0  {
-                m.cursor--
-            }
-        case "down", "j":
-            if m.cursor < len(m.choices) - 1 {
-                m.cursor++
-            }
-        case "enter", " ":
-            _, ok := m.selected[m.cursor]
-            if ok {
-                delete(m.selected, m.cursor)
-            } else {
-                m.selected[m.cursor] = struct{}{}
-            }
-        }
-    }
+	switch msg := msg.(type) {
+    case statusMsg:
+        m.status = int(msg)
+        return m, tea.Quit
+    case errMsg:
+        m.err = msg
+        return m, tea.Quit
 
-    return m, nil
+    case tea.KeyMsg:
+        if msg.Type == tea.KeyCtrlC {
+            return m, tea.Quit
+        }
+	}
+
+	return m, nil
 }
 
 func (m model) View() string {
-    s := "What should we buy at the market?\n\n"
-
-    for i, choice := range m.choices {
-        cursor := " "
-        if m.cursor == i {
-            cursor = ">"
-        }
-
-        checked := " "
-        if _, ok := m.selected[i]; ok {
-            checked = "x"
-        }
-
-        s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+    if m.err != nil {
+        return fmt.Sprintf("\nWe had some trouble: %v\n\n", m.err)
     }
 
-    s += "\nPress q to quit.\n"
+    s := fmt.Sprintf("Checking %s ... ", url)
 
-    return s
+    if m.status > 0 {
+        s += fmt.Sprintf("%d %s!", m.status, http.StatusText(m.status))
+    }
+
+    return "\n" + s + "\n\n"
 }
-
 
 // entry point!!!
 func main() {
-    p := tea.NewProgram(initialModel()) 
-    if _, err := p.Run(); err != nil {
-        fmt.Printf("Alas, there's been an error: %v", err)
-        os.Exit(1)
-    }
+	p := tea.NewProgram(model{})
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Alas, there's been an error: %v", err)
+		os.Exit(1)
+	}
 }
