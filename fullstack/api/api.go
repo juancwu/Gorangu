@@ -1,8 +1,10 @@
 package api
 
 import (
-    "github.com/go-chi/chi/v5"
-    "github.com/go-chi/chi/v5/middleware"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Handler struct {
@@ -27,4 +29,8 @@ func New() *Handler {
     h.router.Get("/", h.getLandingPage)
 
     return h
+}
+
+func (h* Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    h.router.ServeHTTP(w, r)
 }
