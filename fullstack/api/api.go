@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Handler struct {
@@ -24,8 +23,6 @@ func New() *Handler {
     h := &Handler{}
 
     h.router = chi.NewRouter()
-    h.router.Use(middleware.Logger)
-
     h.router.Get("/", h.getLandingPage)
 
     return h
