@@ -21,6 +21,15 @@ var createMigrationsTableSQL string
 //go:embed sql/check_migrations_table.sql
 var checkMigrationsTableSQL string
 
+//go:embed sql/check_migration.sql
+var checkMigrationSQL string
+
+//go:embed sql/record_migration.sql
+var recordMigrationSQL string
+
+//go:embed sql/delete_migration.sql
+var deleteMigrationSQL string
+
 var migrationsPath string
 var dbURL string
 var dbAuthToken string
@@ -115,7 +124,7 @@ func migrate(cmd *cobra.Command, args []string) {
 		if strings.HasSuffix(file.Name(), suffix) {
 			baseName := strings.TrimSuffix(file.Name(), suffix)
 			var id int32
-			err := db.QueryRow("SELECT id FROM migrations WHERE name = ?", baseName).Scan(&id)
+			err := db.QueryRow(checkMigrationSQL, baseName).Scan(&id)
 			if err != nil && err != sql.ErrNoRows {
 				log.Fatalf("Failed to query migrations table: %v", err)
 				os.Exit(1)
@@ -137,13 +146,11 @@ func migrate(cmd *cobra.Command, args []string) {
 					os.Exit(1)
 				}
 
-				if direction == "up" {
-					_, err = db.Exec("INSERT INTO migrations (name) VALUES (?)", baseName)
-					if err != nil {
-						log.Fatalf("Failed to insert migration record into migrations table: %v", err)
-						os.Exit(1)
-					}
-				}
+                _, err = db.Exec(recordMigrationSQL, baseName)
+                if err != nil {
+                    log.Fatalf("Failed to insert migration record into migrations table: %v", err)
+                    os.Exit(1)
+                }
 			}
 
             if err == nil && id > 0 {
@@ -161,7 +168,7 @@ func migrate(cmd *cobra.Command, args []string) {
 					log.Fatalf("Failed to apply migration from file %s: %v", file.Name(), err)
 					os.Exit(1)
 				}
-                _, err = db.Exec("DELETE FROM migrations WHERE id = ?", id)
+                _, err = db.Exec(deleteMigrationSQL, id)
                 if err != nil {
                     log.Fatalf("Failed to remove migration record from migrations table: %v", err)
                     os.Exit(1)
