@@ -4,30 +4,17 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+    "github.com/juancwu/Gorangu/fullstack/constants"
 )
 
-type Handler struct {
-    router chi.Router
-}
+func New() chi.Router {
+    router := chi.NewRouter()
 
-const (
-    STATUS_OK = 200
-    STATUS_CREATED = 201
-    STATUS_BAD_REQUEST = 400
-    STATUS_UNAUTHORIZED = 401
-    STATUS_NOT_FOUND = 404
-    STATUS_SERVER_ERROR = 500
-)
+    router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(constants.STATUS_OK)
+        w.Write([]byte("hello from api router"))
+    })
 
-func New() *Handler {
-    h := &Handler{}
-
-    h.router = chi.NewRouter()
-    h.router.Get("/", h.getLandingPage)
-
-    return h
-}
-
-func (h* Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    h.router.ServeHTTP(w, r)
+    return router
 }
