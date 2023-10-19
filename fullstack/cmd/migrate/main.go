@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+    "sort"
 
 	"github.com/joho/godotenv"
 	_ "github.com/libsql/libsql-client-go/libsql"
@@ -56,16 +57,27 @@ func main() {
 
 	var migrateCmd = &cobra.Command{
 		Use:   "migrate",
-		Short: "Perform migrations",
-		Args:  cobra.ExactArgs(1),
+		Short: "Performs migrations",
+		Args:  cobra.NoArgs,
 		Run:   migrate,
 	}
 	migrateCmd.Flags().StringVarP(&migrationsPath, "path", "p", "./", "Path where the migration files are located")
 	migrateCmd.Flags().StringVarP(&dbURL, "url", "u", "", "The Database URL. If env DB_URL is defined then this is not needed")
 	migrateCmd.Flags().StringVarP(&dbAuthToken, "token", "t", "", "The Database auth token. If env DB_AUTH_TOKEN is defined then this is not needed")
 
+	var rollbackCmd = &cobra.Command{
+		Use:   "rollback",
+		Short: "Rollbacks migrations",
+		Args:  cobra.NoArgs,
+		Run:   rollback,
+	}
+	rollbackCmd.Flags().StringVarP(&migrationsPath, "path", "p", "./", "Path where the migration files are located")
+	rollbackCmd.Flags().StringVarP(&dbURL, "url", "u", "", "The Database URL. If env DB_URL is defined then this is not needed")
+	rollbackCmd.Flags().StringVarP(&dbAuthToken, "token", "t", "", "The Database auth token. If env DB_AUTH_TOKEN is defined then this is not needed")
+
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(migrateCmd)
+    rootCmd.AddCommand(rollbackCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal(err)
@@ -75,20 +87,7 @@ func main() {
 }
 
 func migrate(cmd *cobra.Command, args []string) {
-	direction := args[0]
-
-	if direction != "up" && direction != "down" {
-		log.Fatal("Invalid migration action. Only 'up' or 'down'.")
-		os.Exit(1)
-	}
-
-	if dbURL == "" {
-		dbURL = os.Getenv("DB_URL")
-	}
-
-	if dbAuthToken == "" {
-		dbAuthToken = os.Getenv("DB_AUTH_TOKEN")
-	}
+    checkEnv(&dbURL, &dbAuthToken)
 
 	db, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", dbURL, dbAuthToken))
 	if err != nil {
@@ -97,18 +96,11 @@ func migrate(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
-	// check if migrations table exists or not
-	_, err = db.Exec(checkMigrationsTableSQL)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// table does not exists, create table
-			_, err = db.Exec(createMigrationsTableSQL)
-			if err != nil {
-				log.Fatalf("Failed to create migrations table: %v", err)
-				os.Exit(1)
-			}
-		}
-	}
+    err = checkMigrationTable(db)
+    if err != nil {
+        log.Fatal(err)
+        os.Exit(1)
+    }
 
 	files, err := os.ReadDir(migrationsPath)
 	if err != nil {
@@ -116,10 +108,12 @@ func migrate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+    sort.Slice(files, func(i, j int) bool {
+        // ascending order
+        return files[i].Name() < files[j].Name()
+    })
+
 	var suffix = "_up.sql"
-	if direction == "down" {
-		suffix = "_down.sql"
-	}
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), suffix) {
 			baseName := strings.TrimSuffix(file.Name(), suffix)
@@ -152,6 +146,49 @@ func migrate(cmd *cobra.Command, args []string) {
                     os.Exit(1)
                 }
 			}
+		}
+	}
+
+	fmt.Println("Finished applying migrations ✅")
+}
+
+func rollback(cmd *cobra.Command, args []string) {
+    checkEnv(&dbURL, &dbAuthToken)
+
+	db, err := sql.Open("libsql", fmt.Sprintf("%s?authToken=%s", dbURL, dbAuthToken))
+	if err != nil {
+		log.Fatalf("Error opening a connection to database: %v", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+    err = checkMigrationTable(db)
+    if err != nil {
+        log.Fatal(err)
+        os.Exit(1)
+    }
+
+	files, err := os.ReadDir(migrationsPath)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
+	}
+
+    sort.Slice(files, func(i, j int) bool {
+        // descending order
+        return files[i].Name() > files[j].Name()
+    })
+
+    suffix := "_down.sql"
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), suffix) {
+			baseName := strings.TrimSuffix(file.Name(), suffix)
+			var id int32
+			err := db.QueryRow(checkMigrationSQL, baseName).Scan(&id)
+			if err != nil && err != sql.ErrNoRows {
+				log.Fatalf("Failed to query migrations table: %v", err)
+				os.Exit(1)
+			}
 
             if err == nil && id > 0 {
 				fmt.Printf("Resetting migration: %s\n", file.Name())
@@ -177,7 +214,7 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	fmt.Println("Finished applying migrations!")
+	fmt.Println("Finished rolling back migrations ✅")
 }
 
 func generate(cmd *cobra.Command, args []string) {
@@ -214,4 +251,30 @@ func generate(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Migration files '%s' and '%s' created successfully.\n", upMigration, downMigration)
+}
+
+func checkMigrationTable(db *sql.DB) error {
+	// check if migrations table exists or not
+    _, err := db.Exec(checkMigrationsTableSQL)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// table does not exists, create table
+			_, err = db.Exec(createMigrationsTableSQL)
+			if err != nil {
+				return fmt.Errorf("Failed to create migrations table: %v", err)
+			}
+		}
+	}
+
+    return nil
+}
+
+func checkEnv(dbURL, dbAuthToken *string) {
+	if *dbURL == "" {
+		*dbURL = os.Getenv("DB_URL")
+	}
+
+	if *dbAuthToken == "" {
+		*dbAuthToken = os.Getenv("DB_AUTH_TOKEN")
+	}
 }
