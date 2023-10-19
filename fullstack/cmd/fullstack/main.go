@@ -9,9 +9,12 @@ import (
 
 	"github.com/juancwu/Gorangu/fullstack/api"
 	"github.com/juancwu/Gorangu/fullstack/www"
+	"github.com/juancwu/Gorangu/fullstack/env"
 )
 
 func main() {
+    env.Load()
+
     router := chi.NewRouter()
     router.Use(middleware.Logger)
 
