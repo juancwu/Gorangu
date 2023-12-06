@@ -1,0 +1,25 @@
+package views
+
+templ head() {
+	<head>
+		<script src="https://unpkg.com/htmx.org@1.9.9" integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX" crossorigin="anonymous"></script>
+		<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+		<title>Chat!</title>
+	</head>
+}
+
+templ Index(roomId string) {
+    <!DOCTYPE html>
+	<html>
+		@head()
+		<body>
+            <h1>{roomId}</h1>
+			<div hx-ext="ws" ws-connect={"/chatroom/" + roomId}>
+				<form id="form" ws-send>
+					<input name="chat_message"/>
+				</form>
+				<div id="notifications"></div>
+			</div>
+		</body>
+	</html>
+}
