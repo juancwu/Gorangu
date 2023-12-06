@@ -4,6 +4,7 @@ templ head() {
 	<head>
 		<script src="https://unpkg.com/htmx.org@1.9.9" integrity="sha384-QFjmbokDn2DjBjq+fM+8LUIVrAgqcNW2s0PjAxHETgRn9l4fvX31ZxDxvwQnyMOX" crossorigin="anonymous"></script>
 		<script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+        <link rel="stylesheet" href="/static/styles.css"/>
 		<title>Chat!</title>
 	</head>
 }
@@ -13,13 +14,32 @@ templ Index(roomId string) {
 	<html>
 		@head()
 		<body>
-            <h1>{roomId}</h1>
-			<div hx-ext="ws" ws-connect={"/chatroom/" + roomId}>
-				<form id="form" ws-send>
-					<input name="chat_message"/>
-				</form>
-				<div id="notifications"></div>
-			</div>
+            <main class="mx-auto py-8 max-w-7xl px-4 sm:px-6 lg:px-16">
+                <div class="pb-4 border-b border-gray-400">
+                    <h1 class="text-xl">Room ID: {roomId}</h1>
+                </div>
+                <div class="pt-4" hx-ext="ws" ws-connect={"/chatroom/" + roomId}>
+                    <form id="form" ws-send>
+                        @input()
+                    </form>
+                </div>
+                <div class="mt-4 max-h-40 overflow-y-scroll" id="notifications"></div>
+            </main>
+            <script>
+                document.body.addEventListener("htmx:wsAfterMessage", () => {
+                    const box = document.querySelector("#notifications")
+                    const form = document.querySelector("#form")
+                    const lastChild = box.lastElementChild
+                    if (lastChild) {
+                        lastChild.scrollIntoView({
+                            block: "end",
+                            inline: "nearest",
+                            behavior: "smooth"
+                        });
+                    }
+                    form.reset();
+                });
+            </script>
 		</body>
 	</html>
 }

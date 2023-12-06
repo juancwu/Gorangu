@@ -56,6 +56,8 @@ func (r Room) run(ctx echo.Context, roomId string) {
             if ok {
                 delete(r.clients, clientId)
             }
+
+            fmt.Printf("Number of clients in room (%s): %d\n", roomId, len(r.clients))
             
             if len(r.clients) == 0 {
                 delete(rooms, roomId)
@@ -185,6 +187,7 @@ func main() {
 
 		return nil
 	})
+    e.Static("/static", "static")
 
 	e.Logger.Fatal(e.Start(":5173"))
 }
